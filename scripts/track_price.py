@@ -68,8 +68,15 @@ CSV_HEADER = [
 def find_price(page) -> int:
     """Return the lowest price (as an int, USD) for the target sail date button."""
 
-    # Wait for the itinerary flyout panel to render.
-    page.wait_for_selector(f"text={CRUISE_NAME}", timeout=45000)
+    # Wait for the target date label itself, not just the cruise title - the
+    # title renders on the search-result card almost immediately, but the
+    # "Available dates" price carousel populates slightly later from a
+    # separate request. Waiting on the title alone was a race condition that
+    # made the script give up right before the real content finished loading.
+    combined_pattern = re.compile(
+        "|".join(p.pattern for p in DATE_LABEL_PATTERNS), re.IGNORECASE
+    )
+    page.get_by_text(combined_pattern).first.wait_for(state="visible", timeout=45000)
 
     # The date-selector buttons live under an "Available dates" section.
     # Search the whole panel's text nodes for a container that has both the
