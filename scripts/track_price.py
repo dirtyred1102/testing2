@@ -148,13 +148,35 @@ def append_row(price: int) -> None:
         )
 
 
+def launch_browser(p):
+    """Prefer the machine's real installed Edge/Chrome over Playwright's bundled
+    Chromium, and run visibly (not headless). Royal Caribbean's bot detection
+    fingerprints headless/bundled-Chromium sessions and serves a fake "site
+    down" page to them even from a normal residential IP."""
+
+    launch_args = ["--disable-blink-features=AutomationControlled", "--start-maximized"]
+    for channel in ("msedge", "chrome"):
+        try:
+            return p.chromium.launch(channel=channel, headless=False, args=launch_args)
+        except Exception:
+            continue
+    return p.chromium.launch(headless=False, args=launch_args)
+
+
 def main() -> int:
     with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page(user_agent=(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        ))
+        browser = launch_browser(p)
+        context = browser.new_context(
+            viewport=None,
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0"
+            ),
+        )
+        context.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
+        )
+        page = context.new_page()
         try:
             page.goto(SEARCH_URL, wait_until="networkidle", timeout=45000)
             price = find_price(page)
