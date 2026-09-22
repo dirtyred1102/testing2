@@ -1,3 +1,3 @@
 @echo off
 cd /d "%~dp0"
-python scripts\track_price.py
+py -3.12 scripts\track_price.py
