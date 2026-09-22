@@ -20,10 +20,17 @@ instead of silently logging nothing.
 import csv
 import re
 import sys
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
+
+# --- Phone notifications (ntfy.sh - free, no account needed) -----------
+# Install the ntfy app (iOS/Android), subscribe to a topic name of your
+# choosing (pick something private/hard-to-guess - anyone who knows your
+# topic name can read your notifications), and put that same name below.
+NTFY_TOPIC = ""  # e.g. "brady-cruise-price-8271"
 
 # --- Configuration for the tracked sailing -----------------------------
 
@@ -93,6 +100,32 @@ def find_price(page) -> int:
 
     price_str = match.group(0).replace("$", "").replace(",", "").strip()
     return int(price_str)
+
+
+def send_notification(title: str, message: str) -> None:
+    if not NTFY_TOPIC:
+        return
+    try:
+        req = urllib.request.Request(
+            f"https://ntfy.sh/{NTFY_TOPIC}",
+            data=message.encode("utf-8"),
+            headers={"Title": title, "Priority": "high", "Tags": "moneybag"},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=10)
+    except Exception as exc:
+        print(f"Warning: failed to send notification: {exc}", file=sys.stderr)
+
+
+def get_last_price() -> int | None:
+    """Return the price recorded on the previous run, or None if there isn't one."""
+    if not OUTPUT_CSV.exists():
+        return None
+    with OUTPUT_CSV.open(newline="") as f:
+        rows = list(csv.reader(f))
+    if len(rows) < 2:
+        return None
+    return int(rows[-1][-1])
 
 
 def save_debug_artifacts(page) -> None:
@@ -167,12 +200,25 @@ def main() -> int:
             print(f"ERROR: {exc}", file=sys.stderr)
             save_debug_artifacts(page)
             browser.close()
+            send_notification(
+                "Cruise tracker broke",
+                f"The price scraper failed: {exc}. It may need fixing.",
+            )
             return 1
 
         browser.close()
 
+    previous_price = get_last_price()
     append_row(price)
     print(f"Recorded price ${price} for {SHIP_NAME} sailing {SAIL_START} -> {SAIL_END}")
+
+    if previous_price is not None and price < previous_price:
+        send_notification(
+            "Cruise price dropped!",
+            f"{SHIP_NAME} {CRUISE_NAME} ({SAIL_START} to {SAIL_END}) "
+            f"dropped from ${previous_price} to ${price}.",
+        )
+
     return 0
 
 
