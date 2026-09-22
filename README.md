@@ -32,14 +32,44 @@ Edit the constants at the top of `scripts/track_price.py`:
 
 ## Known limitation
 
-This was built and pushed from an environment whose network egress policy
-blocks `royalcaribbean.com`, so the scraper's selectors could not be
-verified against the live site before committing. **Run the workflow once
-manually** (Actions tab -> "Track cruise price" -> "Run workflow") and check
-that a row was appended to `price_history.csv` with a sane price. If it
-fails, the workflow uploads a `debug-artifacts` zip (a screenshot and the
-page HTML at the point of failure) to help fix the text patterns in
-`find_price()`.
+Royal Caribbean's bot detection blocks traffic from cloud/datacenter IP
+ranges (confirmed: GitHub Actions' runners consistently got served a static
+"royalcaribbean.com is on vacation" fallback page instead of the real site).
+Because of this, **the GitHub Actions workflow does not work** — this script
+needs to run from a normal residential internet connection instead, e.g. a
+scheduled task on your own computer. See "Running locally on Windows" below.
 
-Royal Caribbean may also change their page markup or add bot-detection over
-time, which would require updating the script.
+Royal Caribbean may also change their page markup over time, which would
+require updating the text patterns in `find_price()`.
+
+## Running locally on Windows
+
+1. Install Python from [python.org/downloads](https://www.python.org/downloads/).
+   During install, check the box that says **"Add python.exe to PATH"**.
+2. Download this repository: on the GitHub page, click the green **Code**
+   button -> **Download ZIP**, then extract it somewhere like
+   `C:\Users\<you>\cruise-tracker`.
+3. Open Command Prompt (Start menu -> type `cmd`), then navigate into the
+   folder, e.g.:
+   ```
+   cd C:\Users\<you>\cruise-tracker
+   ```
+4. Install dependencies (one-time setup):
+   ```
+   pip install -r requirements.txt
+   playwright install chromium
+   ```
+5. Test it manually:
+   ```
+   python scripts\track_price.py
+   ```
+   Check that `price_history.csv` now has a new row with a real dollar price.
+6. To automate it daily, use **Task Scheduler**:
+   - Open Task Scheduler (Start menu -> type "Task Scheduler").
+   - Click **Create Basic Task** (right panel).
+   - Name it "Cruise price tracker", click Next.
+   - Trigger: choose **Daily**, pick a time, click Next.
+   - Action: choose **Start a program**, click Next.
+   - Program/script: browse to `run_tracker.bat` inside the extracted folder.
+   - Finish. Your computer needs to be on (or wake from sleep) at that time
+     for it to run.
