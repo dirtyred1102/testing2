@@ -66,58 +66,30 @@ CSV_HEADER = [
 
 
 def find_price(page) -> int:
-    """Return the lowest price (as an int, USD) for the target sail date button."""
+    """Return the lowest price (as an int, USD) for the target sail date button.
 
+    Confirmed markup (from a captured debug snapshot):
+        <p class="...TabLabel...">Feb 1 - Feb 6</p><p class="...TabPriceLabel...">$446</p>
+    The price is the date label's immediate next sibling element - not just
+    "some ancestor that contains a dollar sign somewhere in its full text",
+    which previously grabbed the wrong sibling item's price by accident.
+    """
+
+    combined_pattern = re.compile(
+        "|".join(p.pattern for p in DATE_LABEL_PATTERNS), re.IGNORECASE
+    )
     # Wait for the target date label itself, not just the cruise title - the
     # title renders on the search-result card almost immediately, but the
     # "Available dates" price carousel populates slightly later from a
     # separate request. Waiting on the title alone was a race condition that
     # made the script give up right before the real content finished loading.
-    combined_pattern = re.compile(
-        "|".join(p.pattern for p in DATE_LABEL_PATTERNS), re.IGNORECASE
-    )
-    page.get_by_text(combined_pattern).first.wait_for(state="visible", timeout=45000)
+    label = page.get_by_text(combined_pattern).first
+    label.wait_for(state="visible", timeout=45000)
 
-    # The date-selector buttons live under an "Available dates" section.
-    # Search the whole panel's text nodes for a container that has both the
-    # target date label and a dollar amount, walking up from the date label
-    # until a $-containing ancestor is found.
-    result = page.evaluate(
-        """
-        (labelPatterns) => {
-            const patterns = labelPatterns.map(p => new RegExp(p, 'i'));
-            const priceRe = /\\$\\s?[\\d,]+/;
-
-            const all = Array.from(document.querySelectorAll('body *'));
-            for (const el of all) {
-                const ownText = el.textContent || '';
-                if (!patterns.some(p => p.test(ownText))) continue;
-
-                // Walk up looking for the smallest ancestor that also has a price.
-                let node = el;
-                for (let i = 0; i < 6 && node; i++) {
-                    const text = node.textContent || '';
-                    const m = text.match(priceRe);
-                    if (m) {
-                        return { text, price: m[0] };
-                    }
-                    node = node.parentElement;
-                }
-            }
-            return null;
-        }
-        """,
-        [p.pattern for p in DATE_LABEL_PATTERNS],
-    )
-
-    if not result:
-        raise RuntimeError(
-            "Could not find a date button matching the target sail dates with a price nearby."
-        )
-
-    match = PRICE_PATTERN.search(result["price"])
+    price_text = label.locator("xpath=following-sibling::*[1]").inner_text()
+    match = PRICE_PATTERN.search(price_text)
     if not match:
-        raise RuntimeError(f"Found a candidate element but no price in it: {result!r}")
+        raise RuntimeError(f"Found the date label but no price in its sibling: {price_text!r}")
 
     price_str = match.group(0).replace("$", "").replace(",", "").strip()
     return int(price_str)
