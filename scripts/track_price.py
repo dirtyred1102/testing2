@@ -212,7 +212,16 @@ def main() -> int:
     append_row(price)
     print(f"Recorded price ${price} for {SHIP_NAME} sailing {SAIL_START} -> {SAIL_END}")
 
-    if previous_price is not None and price < previous_price:
+    if previous_price is None:
+        # First-ever run: nothing to compare against yet, so send a one-time
+        # confirmation chime instead - lets you verify the phone notification
+        # pipeline actually works before relying on it for real price drops.
+        send_notification(
+            "Cruise tracker is live",
+            f"Started tracking {SHIP_NAME} {CRUISE_NAME} ({SAIL_START} to "
+            f"{SAIL_END}). Current price: ${price}. You'll be notified if it drops.",
+        )
+    elif price < previous_price:
         send_notification(
             "Cruise price dropped!",
             f"{SHIP_NAME} {CRUISE_NAME} ({SAIL_START} to {SAIL_END}) "
