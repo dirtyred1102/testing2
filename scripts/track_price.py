@@ -69,7 +69,7 @@ def find_price(page) -> int:
     """Return the lowest price (as an int, USD) for the target sail date button."""
 
     # Wait for the itinerary flyout panel to render.
-    page.wait_for_selector(f"text={CRUISE_NAME}", timeout=30000)
+    page.wait_for_selector(f"text={CRUISE_NAME}", timeout=45000)
 
     # The date-selector buttons live under an "Available dates" section.
     # Search the whole panel's text nodes for a container that has both the
@@ -178,7 +178,11 @@ def main() -> int:
         )
         page = context.new_page()
         try:
-            page.goto(SEARCH_URL, wait_until="networkidle", timeout=45000)
+            # "networkidle" is unreliable on a real browser: background chatter
+            # (telemetry, extensions, etc.) can mean the network never truly
+            # goes quiet. Wait only for the initial HTML instead, then let
+            # find_price() wait for the actual content to render.
+            page.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=45000)
             price = find_price(page)
         except Exception as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
